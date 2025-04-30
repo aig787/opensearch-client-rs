@@ -1,8 +1,11 @@
+use std::collections::HashMap;
 #[allow(unused_imports)]
 use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
 pub mod bulk;
+pub mod buckets;
+
 pub use bulk::{BulkAction, BulkError, BulkItemResponse, BulkResponse, IndexResponse, UpdateAction};
 
 ///The unit in which to display byte values.
@@ -2714,14 +2717,285 @@ impl<'de> serde::Deserialize<'de> for SearchGetWithIndexScroll {
   }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Aggregations {}
+/// Type representing sub-aggregations in nested aggregations
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename = "aggregations")]
+pub struct SubAggregations(pub HashMap<String, Aggregations>);
+
+impl SubAggregations {
+  /// Check if there are no sub-aggregations
+  pub fn is_empty(&self) -> bool {
+    self.0.is_empty()
+  }
+
+  /// Create a new empty instance
+  pub fn new() -> Self {
+    SubAggregations(HashMap::new())
+  }
+}
+
+impl std::ops::Deref for SubAggregations {
+  type Target = HashMap<String, Aggregations>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl std::ops::DerefMut for SubAggregations {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
+
+impl From<HashMap<String, Aggregations>> for SubAggregations {
+  fn from(map: HashMap<String, Aggregations>) -> Self {
+    SubAggregations(map)
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Aggregations {
+  // Metric aggregations
+  Avg {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Sum {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Min {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Max {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Count {
+    value: u64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Stats {
+    count: u64,
+    min: f64,
+    max: f64,
+    avg: f64,
+    sum: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  ExtendedStats {
+    count: u64,
+    min: f64,
+    max: f64,
+    avg: f64,
+    sum: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sum_of_squares: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    variance: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    std_deviation: Option<f64>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Cardinality {
+    value: u64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+
+  // Bucket aggregations
+  Terms {
+    doc_count_error_upper_bound: i64,
+    sum_other_doc_count: i64,
+    buckets: Vec<TermsBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Range {
+    buckets: Vec<RangeBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  DateRange {
+    buckets: Vec<DateRangeBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Histogram {
+    buckets: Vec<HistogramBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  DateHistogram {
+    buckets: Vec<DateHistogramBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  GeoDistance {
+    buckets: Vec<GeoDistanceBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Filter {
+    doc_count: u64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  Filters {
+    buckets: Vec<FiltersBucket>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+
+  // Pipeline aggregations
+  AvgBucket {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  SumBucket {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  MinBucket {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  MaxBucket {
+    value: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+  StatsBucket {
+    count: u64,
+    min: f64,
+    max: f64,
+    avg: f64,
+    sum: f64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+
+  // Matrix aggregations
+  Matrix {
+    rows: Vec<MatrixRow>,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+
+  // Nested aggregations
+  Nested {
+    doc_count: u64,
+    #[serde(default, skip_serializing_if = "SubAggregations::is_empty")]
+    aggregations: SubAggregations,
+  },
+
+  // Fallback for other types not explicitly defined
+  #[serde(rename = "aggregations")]
+  Other(HashMap<String, serde_json::Value>),
+}
+
+impl Default for Aggregations {
+  fn default() -> Self {
+    Aggregations::Other(HashMap::new())
+  }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TermsBucket {
+  pub key: serde_json::Value,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RangeBucket {
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub from: Option<f64>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub to: Option<f64>,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DateRangeBucket {
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub from: Option<String>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub to: Option<String>,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HistogramBucket {
+  pub key: f64,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DateHistogramBucket {
+  pub key_as_string: String,
+  pub key: i64,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GeoDistanceBucket {
+  pub key: String,
+  pub from: Option<f64>,
+  pub to: Option<f64>,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FiltersBucket {
+  pub key: String,
+  pub doc_count: u64,
+  #[serde(flatten)]
+  pub aggregations: Option<HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MatrixRow {
+  pub key: String,
+  pub values: Vec<MatrixValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MatrixValue {
+  pub key: String,
+  pub value: f64,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchPostResponseContent<T> {
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub hits: Option<HitsMetadata<T>>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub aggregations: Option<HashMap<String, Aggregations>>,
   #[serde(rename = "_scroll_id", default, skip_serializing_if = "Option::is_none")]
   pub scroll_id: Option<String>,
   #[serde(rename = "_shards", default, skip_serializing_if = "Option::is_none")]
@@ -2730,8 +3004,6 @@ pub struct SearchPostResponseContent<T> {
   pub timed_out: Option<bool>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub took: Option<i64>,
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub aggregations: Option<Aggregations>,
 }
 
 impl<T> From<&SearchPostResponseContent<T>> for SearchPostResponseContent<T> {
@@ -2831,6 +3103,8 @@ pub struct SearchResult<T> {
   pub timed_out: Option<bool>,
   #[serde(default, skip_serializing_if = "Option::is_none")]
   pub took: Option<i64>,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub aggregations: Option<HashMap<String, Aggregations>>,
 }
 
 impl<T> From<&SearchResult<T>> for SearchResult<T> {
@@ -4181,6 +4455,8 @@ impl std::convert::TryFrom<String> for WaitForStatus {
 }
 
 pub mod builder {
+  use std::collections::HashMap;
+
   use super::Aggregations;
 
   #[derive(Clone, Debug)]
@@ -5762,7 +6038,7 @@ pub mod builder {
     shards: Result<Option<super::ShardStatistics>, String>,
     timed_out: Result<Option<bool>, String>,
     took: Result<Option<i64>, String>,
-    aggregations: Result<Option<Aggregations>, String>,
+    aggregations: Result<Option<HashMap<String, Aggregations>>, String>,
   }
 
   impl<T2> Default for SearchPostResponseContent<T2> {
@@ -5865,6 +6141,7 @@ pub mod builder {
     shards: Result<Option<super::ShardStatistics>, String>,
     timed_out: Result<Option<bool>, String>,
     took: Result<Option<i64>, String>,
+    aggregations: Result<Option<HashMap<String, Aggregations>>, String>,
   }
 
   impl<T> Default for SearchResult<T> {
@@ -5875,6 +6152,7 @@ pub mod builder {
         shards: Ok(Default::default()),
         timed_out: Ok(Default::default()),
         took: Ok(Default::default()),
+        aggregations: Ok(Default::default()),
       }
     }
   }
@@ -5941,6 +6219,7 @@ pub mod builder {
         shards: value.shards?,
         timed_out: value.timed_out?,
         took: value.took?,
+        aggregations: value.aggregations?,
       })
     }
   }
@@ -5953,6 +6232,7 @@ pub mod builder {
         shards: Ok(value.shards),
         timed_out: Ok(value.timed_out),
         took: Ok(value.took),
+        aggregations: Ok(value.aggregations),
       }
     }
   }
